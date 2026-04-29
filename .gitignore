@@ -1,0 +1,13 @@
+# PlatformIO build artefacts
+firmware/.pio/
+
+# macOS
+.DS_Store
+
+# Windows
+Thumbs.db
+
+# Editor
+.vscode/
+*.swp
+*.swo
