@@ -164,9 +164,12 @@ CommandResult UartHandler::sendCommand(const String& command,
     result.success  = false;
     result.timedOut = false;
 
-    // Discard any stale bytes in the hardware RX buffer
+    // Discard any stale bytes in the hardware RX buffer.
+    // We read byte-by-byte here because Arduino's HardwareSerial does not
+    // expose a direct "flush RX" method; this loop is bounded by whatever
+    // the UART FIFO currently holds and completes in microseconds.
     while (FRITZ_UART_PORT.available()) {
-        FRITZ_UART_PORT.read();
+        (void)FRITZ_UART_PORT.read();
     }
 
     // Build the marker-wrapped command

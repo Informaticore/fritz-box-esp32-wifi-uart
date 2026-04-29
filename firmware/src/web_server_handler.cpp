@@ -228,7 +228,8 @@ void WebServerHandler::handleRoot() {
 }
 
 void WebServerHandler::handleApiLog() {
-    auto lines = _uart.getLogLines(100);
+    // Return all buffered log lines (up to LOG_BUFFER_LINES as configured)
+    auto lines = _uart.getLogLines(LOG_BUFFER_LINES);
 
     // Build a JSON array: {"lines":["line1","line2",...]}
     String json = "{\"lines\":[";

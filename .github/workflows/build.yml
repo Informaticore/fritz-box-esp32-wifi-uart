@@ -33,6 +33,11 @@ on:
   pull_request:
     branches: ["**"]
 
+# Restrict the default GITHUB_TOKEN to the minimum required permissions.
+# This workflow only needs to read repository contents and write artifacts.
+permissions:
+  contents: read
+
 jobs:
   build:
     name: PlatformIO build (esp32dev)
