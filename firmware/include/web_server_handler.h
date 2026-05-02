@@ -13,6 +13,12 @@
  *                      Returns JSON: { "output": "...", "success": bool,
  *                                      "timedOut": bool }
  *   GET  /api/status – Connection info as JSON
+ *   POST /api/wifi   – Save manual WiFi credentials and (re)connect;
+ *                      body: "ssid=<ssid>&password=<password>"
+ *                      Returns JSON: { "connected": bool, "ssid": "..." }
+ *   POST /api/uart-check – Re-run UART connection probe and return result;
+ *                          Returns JSON: { "online": bool, "summary": "...",
+ *                                         "rawOutput": "..." }
  */
 #pragma once
 
@@ -53,5 +59,7 @@ private:
     void handleApiLog();
     void handleApiCmd();
     void handleApiStatus();
+    void handleApiWifiSet();
+    void handleApiUartCheck();
     void handleNotFound();
 };

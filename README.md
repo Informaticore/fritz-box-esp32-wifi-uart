@@ -7,8 +7,13 @@ An ESP32 firmware that bridges the **FRITZ!Box serial (UART) console** to a
 
 - Reads the FRITZ!Box system log in real time via UART.
 - Sends interactive shell commands to the FRITZ!Box and shows the responses.
+- **Performs a UART connection check at boot** – runs `ls -la /` and verifies
+  a plausible directory listing is returned; result shown in the web UI.
 - **Automatically extracts the WiFi SSID and password from the FRITZ!Box** – no
-  manual WiFi configuration needed.
+  manual WiFi configuration needed on first boot.
+- **Manual WiFi credentials** – a settings panel in the web UI lets you enter
+  credentials at any time; they are stored in NVS and used on every subsequent
+  boot.
 - Falls back to AP mode if credential extraction fails.
 - Firmware binary is built by the CI pipeline and can be downloaded and flashed
   without any toolchain installed locally.
@@ -79,10 +84,12 @@ ESP32 GPIO 16/17 (Serial2)
   └─ WiFi (STA mode, credentials read from FRITZ!Box)
        │
        └─ HTTP web server :80
-            GET  /           – HTML single-page app
-            GET  /api/log    – JSON log lines
-            POST /api/cmd    – Send command, get response
-            GET  /api/status – Connection info
+            GET  /                – HTML single-page app
+            GET  /api/log         – JSON log lines
+            POST /api/cmd         – Send command, get response
+            GET  /api/status      – Connection + UART check info
+            POST /api/wifi        – Save manual WiFi credentials & reconnect
+            POST /api/uart-check  – Re-run UART connectivity check
 ```
 
 ### Language & framework
@@ -169,6 +176,9 @@ pio device monitor
    ========================================
    [UART] Serial2 initialised for FRITZ!Box console
    [Main] Waiting 3 s for FRITZ!Box to settle...
+   [UART] Checking FRITZ!Box serial connection...
+   [UART] Connection check OK: OK – ls -la / returned 14 lines
+   [Main] UART connection OK: OK – ls -la / returned 14 lines
    [UART] Probing FRITZ!Box for WiFi credentials...
    [UART]  Probe 0: echo SSID=$(nv get wlan_ssid ...
    [UART] Credentials extracted – SSID: MyFritzBox
@@ -188,7 +198,7 @@ The single-page app auto-refreshes the log every 2 seconds.
 ```
 ┌─────────────────────────────────────────────────────────────┐
 │  📡 FRITZ!Box UART Bridge                                    │
-│  ✅ Connected | SSID: MyFritzBox | IP: 192.168.178.42       │
+│  ✅ STA | SSID: MyFritzBox | IP: 192.168.178.42 | 🔌 UART OK│
 ├─────────────────────────────────────────────────────────────┤
 │  [log panel – scrolling, auto-updated every 2 s]            │
 │  Dec  1 12:34:56 FritzBox kernel: some log message          │
@@ -199,8 +209,35 @@ The single-page app auto-refreshes the log every 2 seconds.
 ├─────────────────────────────────────────────────────────────┤
 │  ✓ Success                                                   │
 │  <command output>                                            │
+├─────────────────────────────────────────────────────────────┤
+│  ⚙ Settings  ▼                                              │
+│  ┌──────────────────────┐  ┌──────────────────────────────┐ │
+│  │ UART Connection Check│  │ Manual WiFi Credentials      │ │
+│  │ [🔍 Check UART]      │  │ SSID: [ __________________ ] │ │
+│  │ 🟢 OK – 14 lines     │  │ Pass: [ __________________ ] │ │
+│  └──────────────────────┘  │ [💾 Save & Connect]          │ │
+│                             └──────────────────────────────┘ │
 └─────────────────────────────────────────────────────────────┘
 ```
+
+### UART Connection Check
+
+The **⚙ Settings** panel contains a **Check UART** button that runs
+`ls -la /` on the FRITZ!Box via the marker protocol and verifies the output
+looks like a valid Linux root directory listing.  The same check runs
+automatically at startup.  The result badge (`🔌 UART OK` / `⚠ UART ?`) is
+shown in the status bar and updated live.
+
+### Manual WiFi Credentials
+
+The settings panel also exposes a WiFi credentials form.  Entering an SSID
+and (optional) password and clicking **Save & Connect** will:
+
+1. Persist the credentials in the ESP32's NVS flash.
+2. Attempt to connect immediately.  The status bar updates to reflect the
+   new connection state.
+3. If the connection fails, the device returns to (or stays in) AP mode while
+   keeping the credentials in NVS for the next boot.
 
 ---
 

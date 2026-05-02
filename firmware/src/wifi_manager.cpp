@@ -121,3 +121,28 @@ String WiFiManager::connectedSSID() const {
     if (_apMode) return String(FALLBACK_AP_SSID);
     return WiFi.SSID();
 }
+
+bool WiFiManager::setManualCredentials(const String& ssid,
+                                        const String& password) {
+    if (ssid.isEmpty()) {
+        Serial.println(F("[WiFi] setManualCredentials: empty SSID – rejected"));
+        return false;
+    }
+    Serial.printf("[WiFi] Manual credentials received for \"%s\"\n",
+                  ssid.c_str());
+    saveCredentials(ssid, password);
+
+    // Try to connect.  If we are currently in AP mode we first need to
+    // tear it down so we can switch to STA mode.
+    if (_apMode) {
+        WiFi.softAPdisconnect(true);
+        _apMode = false;
+    }
+    if (tryConnect(ssid, password)) {
+        return true;
+    }
+    // Connection failed – go back to AP mode so the web UI stays reachable
+    Serial.println(F("[WiFi] Manual credentials did not work; returning to AP mode"));
+    startAPMode();
+    return false;
+}

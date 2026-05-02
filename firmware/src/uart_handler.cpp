@@ -215,6 +215,77 @@ CommandResult UartHandler::sendCommand(const String& command,
 }
 
 // ---------------------------------------------------------------------------
+// UART connectivity check
+// ---------------------------------------------------------------------------
+
+/**
+ * Heuristically decide whether a string looks like the output of `ls -la /`
+ * on a Linux system.  We accept the output if it:
+ *   a) starts with "total" (standard ls -la header), OR
+ *   b) contains at least one line with Unix permission bits (e.g. "drwxr-xr-x"),
+ *      OR
+ *   c) contains one of the well-known FRITZ!Box root directories.
+ */
+static bool looksLikeDirectoryListing(const String& output) {
+    if (output.indexOf(F("total "))  >= 0) return true;
+    if (output.indexOf(F("drwx"))    >= 0) return true;
+    if (output.indexOf(F("lrwx"))    >= 0) return true;
+    if (output.indexOf(F("-rwx"))    >= 0) return true;
+    // Check for well-known root directory names present on every FRITZ!Box.
+    // We don't require a leading space so entries at line-start are matched too.
+    if (output.indexOf(F("bin"))     >= 0) return true;
+    if (output.indexOf(F("proc"))    >= 0) return true;
+    if (output.indexOf(F("tmp"))     >= 0) return true;
+    if (output.indexOf(F("usr"))     >= 0) return true;
+    return false;
+}
+
+UartCheckResult UartHandler::checkConnection() {
+    Serial.println(F("[UART] Checking FRITZ!Box serial connection..."));
+
+    // Use a shorter timeout for the connectivity probe (5 s is enough)
+    CommandResult res = sendCommand(F("ls -la /"), 5000);
+
+    _lastCheck.rawOutput = res.output;
+
+    if (!res.success) {
+        _lastCheck.online  = false;
+        _lastCheck.summary = res.timedOut
+            ? F("OFFLINE – no response (timed out)")
+            : F("OFFLINE – command failed");
+        Serial.printf("[UART] Connection check FAILED: %s\n",
+                      _lastCheck.summary.c_str());
+        return _lastCheck;
+    }
+
+    if (looksLikeDirectoryListing(res.output)) {
+        // Count non-empty lines in the output as a rough entry count
+        int lines = 0;
+        for (int i = 0; i < (int)res.output.length(); ++i) {
+            if (res.output[i] == '\n') ++lines;
+        }
+        _lastCheck.online  = true;
+        _lastCheck.summary = String(F("OK – ls -la / returned ")) + lines
+                           + F(" lines");
+        Serial.printf("[UART] Connection check OK: %s\n",
+                      _lastCheck.summary.c_str());
+    } else {
+        // Got a response but it doesn't look like a directory listing –
+        // the UART is alive but something unexpected was returned.
+        _lastCheck.online  = false;
+        _lastCheck.summary = F("UNCERTAIN – response does not look like a "
+                               "directory listing");
+        Serial.printf("[UART] Connection check UNCERTAIN. Output: %.80s\n",
+                      res.output.c_str());
+    }
+    return _lastCheck;
+}
+
+const UartCheckResult& UartHandler::lastCheckResult() const {
+    return _lastCheck;
+}
+
+// ---------------------------------------------------------------------------
 // WiFi credential extraction
 // ---------------------------------------------------------------------------
 

@@ -6,12 +6,14 @@
  * -------------
  *  1. Initialise the UART driver on Serial2 (GPIO 16/17) to talk to the
  *     FRITZ!Box serial console.
- *  2. Send probe commands to the FRITZ!Box to extract the WiFi SSID/PSK.
- *  3. Connect the ESP32 to the FRITZ!Box WiFi network.
+ *  2. Run a UART connectivity check: sends `ls -la /` and verifies the
+ *     FRITZ!Box shell responds with a plausible directory listing.
+ *  3. Send probe commands to the FRITZ!Box to extract the WiFi SSID/PSK.
+ *  4. Connect the ESP32 to the FRITZ!Box WiFi network.
  *     – Falls back to NVS-stored credentials from a previous boot.
  *     – Opens its own Access Point (SSID: FritzBridge-Setup) as a last
  *       resort so the web interface is always reachable.
- *  4. Start the HTTP web server (port 80).
+ *  5. Start the HTTP web server (port 80).
  *
  * During normal operation loop() feeds new UART bytes into the log
  * ring-buffer and lets the web server handle incoming HTTP requests.
@@ -60,13 +62,27 @@ void setup() {
     Serial.println(F("[Main] Waiting 3 s for FRITZ!Box to settle..."));
     delay(3000);
 
-    // --- Step 2: Extract WiFi credentials via UART ---
+    // --- Step 2: Check UART connection health ---
+    // Runs `ls -la /` and validates the response looks like a Linux root
+    // directory listing.  The result is stored in the UartHandler and
+    // exposed by the web API at /api/status and /api/uart-check.
+    UartCheckResult check = g_uart.checkConnection();
+    if (check.online) {
+        Serial.printf("[Main] UART connection OK: %s\n", check.summary.c_str());
+    } else {
+        Serial.printf("[Main] UART connection issue: %s\n",
+                      check.summary.c_str());
+        Serial.println(F("[Main] Continuing anyway – the FRITZ!Box may still "
+                         "be booting or the UART may not be connected yet."));
+    }
+
+    // --- Step 3: Extract WiFi credentials via UART ---
     WifiCredentials creds = g_uart.extractWifiCredentials();
 
-    // --- Step 3: Connect to WiFi ---
+    // --- Step 4: Connect to WiFi ---
     g_wifi.connect(creds);
 
-    // --- Step 4: Start web server ---
+    // --- Step 5: Start web server ---
     g_web = new WebServerHandler(g_uart, g_wifi);
     g_web->begin();
 

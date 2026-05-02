@@ -40,6 +40,16 @@ struct CommandResult {
     bool   timedOut;    ///< true when we gave up waiting for a marker
 };
 
+/**
+ * Result of a UART connectivity check.
+ * @see UartHandler::checkConnection()
+ */
+struct UartCheckResult {
+    bool   online;      ///< true when UART is alive and the shell responded
+    String summary;     ///< Short human-readable status (e.g. "OK – 12 entries")
+    String rawOutput;   ///< Raw output of the probe command (trimmed)
+};
+
 // ---------------------------------------------------------------------------
 // UartHandler
 // ---------------------------------------------------------------------------
@@ -88,6 +98,24 @@ public:
                               uint32_t timeoutMs = CMD_TIMEOUT_MS);
 
     /**
+     * Perform a UART connectivity check by running `ls -la /` on the
+     * FRITZ!Box.  Verifies the UART wiring is correct and the FRITZ!Box
+     * shell is responding with plausible output (i.e. a Linux directory
+     * listing containing expected entries such as "bin", "proc", or "tmp").
+     *
+     * The result is cached internally; call lastCheckResult() to retrieve it
+     * without re-running the command.
+     *
+     * @return UartCheckResult indicating whether the connection is healthy.
+     */
+    UartCheckResult checkConnection();
+
+    /** Return the result of the most recent checkConnection() call.
+     *  Returns an "unchecked" entry (online=false) before the first call.
+     */
+    const UartCheckResult& lastCheckResult() const;
+
+    /**
      * Attempt to read the FRITZ!Box WLAN SSID and PSK via the console.
      * Tries several known probe commands in order and returns on the first
      * successful match.  Returns a WifiCredentials with valid=false when
@@ -108,6 +136,7 @@ public:
 private:
     std::deque<String> _logBuffer;   ///< Ring-buffer of received log lines
     String             _lineBuf;     ///< Accumulator for the current line
+    UartCheckResult    _lastCheck;   ///< Cached result of the last checkConnection()
 
     /** Append a completed line to the ring-buffer (evicts oldest if full). */
     void addLogLine(const String& line);

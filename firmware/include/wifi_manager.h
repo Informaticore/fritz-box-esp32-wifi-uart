@@ -46,6 +46,20 @@ public:
     /** SSID of the network the ESP32 is associated with (or AP SSID). */
     String connectedSSID() const;
 
+    /**
+     * Save manually-supplied credentials to NVS and attempt to connect.
+     *
+     * Can be called at any time via the web API (e.g. when the device is in
+     * AP mode and the user fills in the WiFi settings form).  On success the
+     * device switches to Station mode; on failure it stays in its current
+     * mode.
+     *
+     * @param ssid      Network name (must be non-empty).
+     * @param password  Network password (may be empty for open networks).
+     * @return true when the connection succeeded, false otherwise.
+     */
+    bool setManualCredentials(const String& ssid, const String& password);
+
 private:
     bool _apMode = false;
 
