@@ -1,0 +1,22 @@
+# WiFi credentials file for the FRITZ!Box ESP32 UART Bridge
+#
+# Fill in the SSID and password for the network the ESP32 should join,
+# then upload this file to the ESP32 flash.
+#
+# From the repository root:
+#   pio run --project-dir firmware --target uploadfs
+#
+# Or from inside the firmware/ directory:
+#   pio run --target uploadfs
+#
+# The device checks this file at every boot.  If valid credentials are
+# found here they are tried before any NVS-stored credentials and before
+# opening the fallback Access Point.
+#
+# Lines that start with '#' are comments and are ignored.
+# The 'password' line may be omitted or left empty for open (WPA-less) networks.
+#
+# ---- Edit the two lines below and remove the leading '#' ----------------
+
+#ssid=MyNetworkName
+#password=MySecretPassword

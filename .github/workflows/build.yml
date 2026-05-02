@@ -1,0 +1,92 @@
+##############################################################################
+# FRITZ!Box ESP32 UART Bridge – CI build pipeline
+#
+# Triggers: every push and every pull-request.
+#
+# What it does:
+#   1. Installs Python and PlatformIO Core.
+#   2. Caches the PlatformIO package registry so subsequent runs are faster.
+#   3. Builds the firmware with `pio run`.
+#   4. Uploads the compiled firmware binary as a workflow artifact so it can
+#      be downloaded directly from the GitHub Actions run page and flashed
+#      to an ESP32 with esptool.py or the ESP32 Flash Download Tool.
+#
+# Flashing the downloaded firmware
+# ---------------------------------
+#   pip install esptool
+#   esptool.py --chip esp32 --port /dev/ttyUSB0 --baud 460800 \
+#     write_flash -z 0x10000 firmware.bin
+#
+# Or using the full set of binaries (bootloader + partition table):
+#   esptool.py --chip esp32 --port /dev/ttyUSB0 --baud 460800 \
+#     write_flash \
+#     0x1000  bootloader.bin  \
+#     0x8000  partitions.bin  \
+#     0x10000 firmware.bin
+##############################################################################
+
+name: Build Firmware
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+    branches: ["**"]
+
+# Restrict the default GITHUB_TOKEN to the minimum required permissions.
+# This workflow only needs to read repository contents and write artifacts.
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: PlatformIO build (esp32dev)
+    runs-on: ubuntu-latest
+
+    steps:
+      # -----------------------------------------------------------------------
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # -----------------------------------------------------------------------
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      # -----------------------------------------------------------------------
+      # Cache the PlatformIO package registry (~/.platformio/.cache)
+      # so that the ESP32 Arduino core is not re-downloaded on every run.
+      - name: Cache PlatformIO packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.platformio/.cache
+          key: pio-${{ runner.os }}-${{ hashFiles('firmware/platformio.ini') }}
+          restore-keys: |
+            pio-${{ runner.os }}-
+
+      # -----------------------------------------------------------------------
+      - name: Install PlatformIO Core
+        run: pip install --upgrade platformio
+
+      # -----------------------------------------------------------------------
+      - name: Build firmware
+        working-directory: firmware
+        run: pio run
+
+      # -----------------------------------------------------------------------
+      # Upload the compiled binaries as a named artifact.
+      # The artifact zip will contain:
+      #   firmware.bin   – application image  (flash at 0x10000)
+      #   bootloader.bin – bootloader         (flash at 0x1000)
+      #   partitions.bin – partition table    (flash at 0x8000)
+      - name: Upload firmware artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: esp32-firmware
+          path: |
+            firmware/.pio/build/esp32dev/firmware.bin
+            firmware/.pio/build/esp32dev/bootloader.bin
+            firmware/.pio/build/esp32dev/partitions.bin
+          if-no-files-found: error
+          retention-days: 30
