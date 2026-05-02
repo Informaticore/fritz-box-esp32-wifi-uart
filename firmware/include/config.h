@@ -78,3 +78,37 @@
 
 /** How long (ms) to wait for a STA WiFi association before giving up. */
 #define WIFI_CONNECT_TIMEOUT_MS 20000
+
+// ---------------------------------------------------------------------------
+// WiFi credential file (LittleFS)
+// ---------------------------------------------------------------------------
+/**
+ * Path inside the LittleFS filesystem where manual WiFi credentials can be
+ * stored.  From the repository root, upload the file with:
+ *
+ *   pio run --project-dir firmware --target uploadfs
+ *
+ * Or from inside the firmware/ directory:
+ *
+ *   pio run --target uploadfs
+ *
+ * File format (plain text, one entry per line, '#' starts a comment):
+ *
+ *   ssid=MyNetworkName
+ *   password=MySecret
+ *
+ * If the file is present and contains a non-empty SSID the credentials are
+ * tried at boot before falling back to NVS-stored or AP mode.
+ * Delete the file (or clear its contents) to disable.
+ */
+#define WIFI_CREDS_FILE     "/wifi.txt"
+
+// ---------------------------------------------------------------------------
+// FRITZ!Box UART log mirroring
+// ---------------------------------------------------------------------------
+/**
+ * When set to 1 every log line received from the FRITZ!Box on Serial2 is
+ * also printed to the USB debug serial (Serial) with a "[FRITZ] " prefix.
+ * Set to 0 to silence it (e.g. if the USB monitor output becomes too noisy).
+ */
+#define FRITZ_LOG_ECHO_USB  1

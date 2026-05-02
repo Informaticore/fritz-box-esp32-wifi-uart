@@ -40,6 +40,9 @@ public:
     /** Returns true when the ESP32 is connected as a Station. */
     bool isConnected() const;
 
+    /** Returns true when the ESP32 is operating as a soft Access Point. */
+    bool isApMode() const;
+
     /** IP address: STA address when connected, AP address in AP mode. */
     String ipAddress() const;
 
@@ -75,6 +78,12 @@ private:
 
     /** Persist credentials to NVS for future boots. */
     void saveCredentials(const String& ssid, const String& password);
+
+    /**
+     * Load credentials from the LittleFS wifi.txt file (if present).
+     * Returns false when the file does not exist or contains no SSID.
+     */
+    bool loadFileCredentials(String& ssid, String& password);
 
     /** Open a softAP so the user can still reach the web interface. */
     void startAPMode();

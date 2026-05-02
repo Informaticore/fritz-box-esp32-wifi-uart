@@ -7,6 +7,7 @@
 #include "wifi_manager.h"
 #include "config.h"
 #include <Preferences.h>
+#include <LittleFS.h>
 
 // NVS namespace and key names
 static const char* NVS_NAMESPACE = "wificreds";
@@ -94,6 +95,63 @@ void WiFiManager::startAPMode() {
     Serial.println(F("[WiFi] Connect to the AP and open the IP in a browser"));
 }
 
+bool WiFiManager::loadFileCredentials(String& ssid, String& password) {
+    // Mount LittleFS (false = don't format if mount fails).
+    // If there is no LittleFS partition the call returns false and we simply
+    // skip the file-based credentials without any side-effects.
+    if (!LittleFS.begin(false)) {
+        return false;
+    }
+
+    File f = LittleFS.open(WIFI_CREDS_FILE, "r");
+    if (!f) {
+        LittleFS.end();
+        return false;
+    }
+
+    // Read the entire file at once to avoid repeated String allocations from
+    // calling readStringUntil() in a tight loop.
+    String contents = f.readString();
+    f.close();
+    LittleFS.end();
+
+    bool foundSsid = false;
+    int  pos = 0;
+    while (pos < (int)contents.length()) {
+        int nl = contents.indexOf('\n', pos);
+        if (nl < 0) nl = contents.length();
+
+        String line = contents.substring(pos, nl);
+        line.trim();
+        pos = nl + 1;
+
+        // Skip blank lines and comment lines
+        if (line.isEmpty() || line.startsWith("#")) continue;
+
+        int eq = line.indexOf('=');
+        if (eq < 0) continue;
+
+        String key = line.substring(0, eq);
+        String val = line.substring(eq + 1);
+        key.trim();
+        val.trim();
+
+        if (key.equalsIgnoreCase("ssid")) {
+            ssid = val;
+            foundSsid = true;
+        } else if (key.equalsIgnoreCase("password")) {
+            password = val;
+        }
+    }
+
+    if (foundSsid && !ssid.isEmpty()) {
+        Serial.printf("[WiFi] Loaded credentials from file for \"%s\"\n",
+                      ssid.c_str());
+        return true;
+    }
+    return false;
+}
+
 // ---------------------------------------------------------------------------
 // Public interface
 // ---------------------------------------------------------------------------
@@ -108,7 +166,20 @@ bool WiFiManager::connect(const WifiCredentials& creds) {
         Serial.println(F("[WiFi] UART credentials did not work"));
     }
 
-    // --- Step 2: Use NVS-stored credentials ---
+    // --- Step 2: Use LittleFS wifi.txt file credentials ---
+    // File credentials are intentionally NOT saved to NVS; they remain a
+    // separate, file-only source read fresh on every boot.
+    {
+        String fileSsid, filePass;
+        if (loadFileCredentials(fileSsid, filePass)) {
+            if (tryConnect(fileSsid, filePass)) {
+                return true;
+            }
+            Serial.println(F("[WiFi] File credentials did not work"));
+        }
+    }
+
+    // --- Step 3: Use NVS-stored credentials ---
     String storedSsid, storedPass;
     if (loadStoredCredentials(storedSsid, storedPass)) {
         if (tryConnect(storedSsid, storedPass)) {
@@ -117,7 +188,7 @@ bool WiFiManager::connect(const WifiCredentials& creds) {
         Serial.println(F("[WiFi] Stored credentials did not work"));
     }
 
-    // --- Step 3: Open fallback AP ---
+    // --- Step 4: Open fallback AP ---
     Serial.println(F("[WiFi] All connection attempts failed; starting AP mode"));
     startAPMode();
     return false;
@@ -125,6 +196,10 @@ bool WiFiManager::connect(const WifiCredentials& creds) {
 
 bool WiFiManager::isConnected() const {
     return !_apMode && (WiFi.status() == WL_CONNECTED);
+}
+
+bool WiFiManager::isApMode() const {
+    return _apMode;
 }
 
 String WiFiManager::ipAddress() const {

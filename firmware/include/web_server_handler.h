@@ -24,6 +24,7 @@
 
 #include <Arduino.h>
 #include <WebServer.h>
+#include <DNSServer.h>
 #include "config.h"
 #include "uart_handler.h"
 #include "wifi_manager.h"
@@ -51,7 +52,9 @@ public:
     void loop();
 
 private:
-    WebServer   _server;
+    WebServer    _server;
+    DNSServer    _dnsServer;
+    bool         _dnsStarted = false;
     UartHandler& _uart;
     WiFiManager& _wifiMgr;
 
@@ -61,5 +64,6 @@ private:
     void handleApiStatus();
     void handleApiWifiSet();
     void handleApiUartCheck();
+    void handleCaptivePortal();
     void handleNotFound();
 };

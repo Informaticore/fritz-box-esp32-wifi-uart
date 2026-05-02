@@ -85,6 +85,13 @@ void UartHandler::addLogLine(const String& line) {
         _logBuffer.pop_front();
     }
     _logBuffer.push_back(line);
+
+#if FRITZ_LOG_ECHO_USB
+    // Mirror FRITZ!Box UART output to the USB debug serial so it is visible
+    // in a serial monitor without needing to open the web interface.
+    Serial.print(F("[FRITZ] "));
+    Serial.println(line);
+#endif
 }
 
 std::vector<String> UartHandler::getLogLines(size_t maxLines) const {

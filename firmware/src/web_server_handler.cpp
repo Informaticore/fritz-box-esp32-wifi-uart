@@ -351,6 +351,17 @@ void WebServerHandler::begin() {
                                  [this]() { handleApiWifiSet();  });
     _server.on("/api/uart-check",HTTP_POST,
                                  [this]() { handleApiUartCheck();});
+
+    // Captive-portal detection endpoints.
+    // When a device connects to the AP it probes these URLs to detect whether
+    // it needs to sign in.  Redirecting them to "/" causes the OS to open a
+    // browser automatically ("Sign in to network" on Android/iOS/Windows).
+    _server.on("/generate_204",        [this]() { handleCaptivePortal(); }); // Android
+    _server.on("/hotspot-detect.html", [this]() { handleCaptivePortal(); }); // iOS / macOS
+    _server.on("/connecttest.txt",     [this]() { handleCaptivePortal(); }); // Windows
+    _server.on("/ncsi.txt",            [this]() { handleCaptivePortal(); }); // Windows NCSI
+    _server.on("/redirect",            [this]() { handleCaptivePortal(); });
+
     _server.onNotFound(          [this]() { handleNotFound();    });
 
     _server.begin();
@@ -358,6 +369,26 @@ void WebServerHandler::begin() {
 }
 
 void WebServerHandler::loop() {
+    // Keep the captive-portal DNS server running whenever we are in AP mode.
+    // Resolving all hostnames to the ESP32's softAP IP causes mobile devices
+    // to detect the captive portal and offer to open a browser automatically.
+    if (_wifiMgr.isApMode()) {
+        if (!_dnsStarted) {
+            _dnsServer.setErrorReplyCode(DNSReplyCode::NoError);
+            if (_dnsServer.start(53, "*", WiFi.softAPIP())) {
+                _dnsStarted = true;
+                Serial.println(F("[Web] Captive-portal DNS server started"));
+            } else {
+                Serial.println(F("[Web] WARNING: captive-portal DNS server failed to start"));
+            }
+        }
+        _dnsServer.processNextRequest();
+    } else if (_dnsStarted) {
+        _dnsServer.stop();
+        _dnsStarted = false;
+        Serial.println(F("[Web] Captive-portal DNS server stopped"));
+    }
+
     _server.handleClient();
 }
 
@@ -473,6 +504,25 @@ void WebServerHandler::handleApiUartCheck() {
     _server.send(200, "application/json", json);
 }
 
+void WebServerHandler::handleCaptivePortal() {
+    // Redirect the client to the root page using the softAP IP so the URL
+    // works regardless of what hostname the OS tried to reach.
+    String url;
+    url.reserve(32);
+    url = "http://";
+    url += WiFi.softAPIP().toString();
+    url += "/";
+    _server.sendHeader("Location", url);
+    _server.send(302, "text/plain", "");
+}
+
 void WebServerHandler::handleNotFound() {
+    // In AP mode redirect all unknown paths to the root so the browser ends
+    // up on the web interface even if it navigated to some other URL first
+    // (common when a captive-portal browser opens with a vendor URL).
+    if (_wifiMgr.isApMode()) {
+        handleCaptivePortal();
+        return;
+    }
     _server.send(404, "text/plain", "Not found");
 }
