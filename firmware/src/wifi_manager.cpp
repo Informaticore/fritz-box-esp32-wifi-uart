@@ -71,8 +71,23 @@ void WiFiManager::saveCredentials(const String& ssid, const String& password) {
 
 void WiFiManager::startAPMode() {
     _apMode = true;
+
+    // Bring the radio to a clean off state first.  This is necessary because
+    // tryConnect() calls WiFi.disconnect(true) which powers the radio off via
+    // WIFI_OFF.  Switching directly from WIFI_OFF (or a failed STA attempt) to
+    // WIFI_AP without a settling delay causes softAP() to silently fail, so
+    // the network never actually broadcasts.
+    WiFi.mode(WIFI_OFF);
+    delay(100);
     WiFi.mode(WIFI_AP);
-    WiFi.softAP(FALLBACK_AP_SSID, FALLBACK_AP_PASSWORD);
+    delay(100);
+
+    bool ok = WiFi.softAP(FALLBACK_AP_SSID, FALLBACK_AP_PASSWORD);
+    if (!ok) {
+        Serial.println(F("[WiFi] ERROR: softAP() failed – AP was not started!"));
+        return;
+    }
+
     Serial.printf("[WiFi] AP mode started – SSID: %s  IP: %s\n",
                   FALLBACK_AP_SSID,
                   WiFi.softAPIP().toString().c_str());
@@ -133,11 +148,14 @@ bool WiFiManager::setManualCredentials(const String& ssid,
     saveCredentials(ssid, password);
 
     // Try to connect.  If we are currently in AP mode we first need to
-    // tear it down so we can switch to STA mode.
+    // tear it down so we can switch to STA mode cleanly.
     if (_apMode) {
         WiFi.softAPdisconnect(true);
         _apMode = false;
+        delay(100);
     }
+    WiFi.mode(WIFI_OFF);
+    delay(100);
     if (tryConnect(ssid, password)) {
         return true;
     }
