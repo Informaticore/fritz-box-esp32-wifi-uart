@@ -3,39 +3,41 @@
  * @brief WiFi connection manager with NVS credential caching and AP fallback.
  *
  * Connection strategy (in order):
- *  1. Use credentials extracted from the FRITZ!Box via UART.
- *  2. If that fails, try credentials previously stored in NVS (flash).
- *  3. If that also fails, open a fallback Access Point so the web interface
- *     can still be reached and UART commands can still be issued.
+ *  1. Try credentials stored in NVS (from a previous manual save).
+ *  2. Try credentials from the LittleFS wifi.txt file (if present).
+ *  3. If both fail, open a fallback Access Point so the web interface
+ *     can still be reached.
+ *
+ * WiFi credentials are set manually via:
+ *  - The web interface Settings panel (saved to NVS).
+ *  - A wifi.txt file on LittleFS (see config.h for format).
  */
 #pragma once
 
 #include <Arduino.h>
 #include <WiFi.h>
 #include "config.h"
-#include "uart_handler.h"
 
 /**
  * @class WiFiManager
  *
  * Manages the ESP32 WiFi connection.  Credentials are persisted in NVS so
- * that the device reconnects automatically after a power cycle even if the
- * FRITZ!Box UART extraction happens to fail temporarily.
+ * that the device reconnects automatically after a power cycle.
  */
 class WiFiManager {
 public:
     WiFiManager() = default;
 
     /**
-     * Attempt to connect to the FRITZ!Box WiFi network.
+     * Attempt to connect to WiFi using stored credentials.
      *
-     * @param creds  Credentials obtained by UartHandler::extractWifiCredentials().
-     *               If creds.valid is false the method skips straight to the
-     *               NVS-stored fallback.
+     * Tries NVS credentials first, then the LittleFS wifi.txt file.
+     * Falls back to AP mode when all attempts fail.
+     *
      * @return true  – connected in Station mode.
      *         false – running in AP mode (fallback).
      */
-    bool connect(const WifiCredentials& creds);
+    bool connect();
 
     /** Returns true when the ESP32 is connected as a Station. */
     bool isConnected() const;

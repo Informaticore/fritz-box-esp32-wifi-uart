@@ -9,6 +9,23 @@
 #pragma once
 
 // ---------------------------------------------------------------------------
+// UART Bridge / Debug mode
+// ---------------------------------------------------------------------------
+/**
+ * When UART_BRIDGE_MODE is 1 the firmware acts as a **transparent
+ * UART-to-USB bridge**.  Every byte arriving on Serial2 (from the
+ * FRITZ!Box) is forwarded to the USB serial port (Serial) and vice versa.
+ * No WiFi, no web server – just a clean wire-level passthrough so you can
+ * inspect the raw FRITZ!Box console output in a terminal.
+ *
+ * This default can be overridden at build time via the PlatformIO
+ * build_flags (see platformio.ini):
+ *   -DUART_BRIDGE_MODE=0  →  full WiFi + web UI firmware
+ *   -DUART_BRIDGE_MODE=1  →  transparent UART-USB bridge (default)
+ */
+#define UART_BRIDGE_MODE 1
+
+// ---------------------------------------------------------------------------
 // UART pins (FRITZ!Box serial console → ESP32 Serial2)
 // ---------------------------------------------------------------------------
 /**
@@ -59,19 +76,9 @@
 // ---------------------------------------------------------------------------
 #define WEB_SERVER_PORT     80
 
-// ---------------------------------------------------------------------------
-// WiFi credential extraction
-// ---------------------------------------------------------------------------
 /**
- * How long (ms) each FRITZ!Box probe command is allowed to run before we
- * consider it failed and try the next one.
- */
-#define WIFI_CRED_TIMEOUT_MS    30000
-
-/**
- * If all credential-extraction methods fail AND no credentials are stored
- * in NVS, the ESP32 opens its own access point with these settings so that
- * you can still reach the web interface and interact with the FRITZ!Box.
+ * If no credentials are stored in NVS, the ESP32 opens its own access
+ * point with these settings so that you can still reach the web interface.
  */
 #define FALLBACK_AP_SSID        "FritzBridge-Setup"
 #define FALLBACK_AP_PASSWORD    "fritzbridge"

@@ -90,8 +90,9 @@ static const char HTML_PAGE[] PROGMEM = R"rawhtml(<!DOCTYPE html>
     <div class="settings-col">
       <h3>Manual WiFi Credentials</h3>
       <p style="font-size:.75rem;color:#888">
-        Override or set WiFi credentials manually. These are stored in NVS
-        and used on every boot (including after automatic credential extraction).
+        Set WiFi credentials manually. These are stored in NVS and used on
+        every boot. Alternatively, upload a <code>wifi.txt</code> file via
+        <code>pio run -e esp32dev-full --target uploadfs</code>.
       </p>
       <form onsubmit="saveWifi(event)">
         <div class="field">

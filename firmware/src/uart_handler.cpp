@@ -3,48 +3,14 @@
  * @brief FRITZ!Box UART driver implementation.
  *
  * See uart_handler.h for a full description of the design.
+ *
+ * This file is only compiled when UART_BRIDGE_MODE = 0.
  */
 #include "uart_handler.h"
 #include "config.h"
 
 // Convenience alias so the code compiles for any board using Serial2
 #define FRITZ_UART_PORT Serial2
-
-// ---------------------------------------------------------------------------
-// Private helpers
-// ---------------------------------------------------------------------------
-
-/**
- * Parse a line of the form  KEY=value  or  KEY:value  and return the value
- * (trimmed).  Returns true when the key was found and the value is
- * non-empty.
- */
-static bool extractValue(const String& line,
-                          const String& key,
-                          String&       value) {
-    // Case-insensitive search for the key token
-    String lineLower = line;
-    lineLower.toLowerCase();
-    String keyLower = key;
-    keyLower.toLowerCase();
-
-    int idx = lineLower.indexOf(keyLower);
-    if (idx < 0) return false;
-
-    // Find the separator ('=' or ':') that follows the key token
-    int sep = -1;
-    for (int i = idx + (int)key.length(); i < (int)line.length(); ++i) {
-        if (line[i] == '=' || line[i] == ':') {
-            sep = i;
-            break;
-        }
-    }
-    if (sep < 0) return false;
-
-    value = line.substring(sep + 1);
-    value.trim();
-    return !value.isEmpty();
-}
 
 // ---------------------------------------------------------------------------
 // UartHandler::begin
@@ -292,105 +258,3 @@ const UartCheckResult& UartHandler::lastCheckResult() const {
     return _lastCheck;
 }
 
-// ---------------------------------------------------------------------------
-// WiFi credential extraction
-// ---------------------------------------------------------------------------
-
-/**
- * Table of probe commands to try.  Each entry contains:
- *  - cmd       : shell command(s) that print the SSID and PSK
- *  - ssidToken : keyword used to identify the SSID line
- *  - pskToken  : keyword used to identify the PSK line
- *
- * The parser looks for  KEY=value  or  KEY:value  patterns (case-insensitive).
- * Add or reorder entries to match your FRITZ!Box firmware version.
- */
-static const struct {
-    const char* cmd;
-    const char* ssidToken;
-    const char* pskToken;
-} CRED_PROBES[] = {
-    // --- Method 1: AVM nvram tool (most common on FRITZ!Box) ---
-    // Outputs:  SSID=MyNetwork   PSK=MyPassword
-    {
-        "echo SSID=$(nv get wlan_ssid 2>/dev/null); "
-        "echo PSK=$(nv get wlan_psk 2>/dev/null)",
-        "SSID", "PSK"
-    },
-    // --- Method 2: wlancfg CLI (present on some models) ---
-    {
-        "echo SSID=$(wlancfg WLAN_NETWORK_NAME 2>/dev/null); "
-        "echo PSK=$(wlancfg WLAN_NETWORK_KEY 2>/dev/null)",
-        "SSID", "PSK"
-    },
-    // --- Method 3: grep from flash-resident settings files ---
-    {
-        "grep -m1 -iE '^(ssid|WLAN_NETWORK_NAME)' "
-            "/var/flash/wlan_settings 2>/dev/null; "
-        "grep -m1 -iE '^(psk|WLAN_NETWORK_KEY)' "
-            "/var/flash/wlan_settings 2>/dev/null",
-        "SSID", "PSK"
-    },
-    // --- Method 4: alternative flash path used by some firmware versions ---
-    {
-        "grep -m1 -iE '^(ssid|WLAN_NETWORK_NAME)' "
-            "/var/tmp/wlan_settings 2>/dev/null; "
-        "grep -m1 -iE '^(psk|WLAN_NETWORK_KEY)' "
-            "/var/tmp/wlan_settings 2>/dev/null",
-        "SSID", "PSK"
-    },
-    // --- Sentinel ---
-    { nullptr, nullptr, nullptr }
-};
-
-WifiCredentials UartHandler::extractWifiCredentials() {
-    WifiCredentials creds;
-
-    Serial.println(F("[UART] Probing FRITZ!Box for WiFi credentials..."));
-
-    for (int i = 0; CRED_PROBES[i].cmd != nullptr; ++i) {
-        Serial.printf("[UART]  Probe %d: %s\n", i, CRED_PROBES[i].cmd);
-
-        CommandResult res = sendCommand(CRED_PROBES[i].cmd,
-                                        WIFI_CRED_TIMEOUT_MS);
-        if (!res.success || res.output.isEmpty()) {
-            Serial.println(F("[UART]  Probe returned no output, skipping"));
-            continue;
-        }
-
-        // Parse the output line by line
-        bool   foundSsid = false, foundPsk = false;
-        String raw = res.output + '\n';
-
-        for (int pos = 0; pos < (int)raw.length(); ) {
-            int nl = raw.indexOf('\n', pos);
-            if (nl < 0) nl = raw.length();
-
-            String line = raw.substring(pos, nl);
-            line.trim();
-            pos = nl + 1;
-
-            if (line.isEmpty()) continue;
-
-            if (!foundSsid) {
-                foundSsid = extractValue(line, CRED_PROBES[i].ssidToken,
-                                         creds.ssid);
-            }
-            if (!foundPsk) {
-                foundPsk = extractValue(line, CRED_PROBES[i].pskToken,
-                                        creds.password);
-            }
-        }
-
-        if (foundSsid && foundPsk) {
-            creds.valid = true;
-            Serial.printf("[UART] Credentials extracted – SSID: %s\n",
-                          creds.ssid.c_str());
-            return creds;
-        }
-        Serial.println(F("[UART]  Probe did not yield complete credentials"));
-    }
-
-    Serial.println(F("[UART] Could not extract WiFi credentials from FRITZ!Box"));
-    return creds;   // valid == false
-}
