@@ -11,6 +11,8 @@
  *
  * Everything received outside the markers goes to the log ring-buffer.
  * Everything between the markers is returned as the command response.
+ *
+ * This header is only compiled when UART_BRIDGE_MODE = 0.
  */
 #pragma once
 
@@ -22,13 +24,6 @@
 // ---------------------------------------------------------------------------
 // Data structures
 // ---------------------------------------------------------------------------
-
-/** WiFi credentials extracted from the FRITZ!Box via UART. */
-struct WifiCredentials {
-    String ssid;
-    String password;
-    bool   valid = false;   ///< true only when both fields are non-empty
-};
 
 /**
  * Result of a command sent to the FRITZ!Box.
@@ -62,7 +57,6 @@ struct UartCheckResult {
  * Responsibilities:
  *  - Continuously accumulate incoming characters into a log ring-buffer.
  *  - Send shell commands using the marker protocol and return their output.
- *  - Probe the FRITZ!Box for the WiFi SSID and PSK at startup.
  */
 class UartHandler {
 public:
@@ -114,14 +108,6 @@ public:
      *  Returns an "unchecked" entry (online=false) before the first call.
      */
     const UartCheckResult& lastCheckResult() const;
-
-    /**
-     * Attempt to read the FRITZ!Box WLAN SSID and PSK via the console.
-     * Tries several known probe commands in order and returns on the first
-     * successful match.  Returns a WifiCredentials with valid=false when
-     * all probes fail.
-     */
-    WifiCredentials extractWifiCredentials();
 
     /**
      * Return up to maxLines recent log lines (oldest first, newest last).

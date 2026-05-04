@@ -2,21 +2,24 @@
  * @file main.cpp
  * @brief FRITZ!Box ESP32 UART Bridge – main entry point.
  *
- * Boot sequence
- * -------------
- *  1. Initialise the UART driver on Serial2 (GPIO 16/17) to talk to the
- *     FRITZ!Box serial console.
- *  2. Run a UART connectivity check: sends `ls -la /` and verifies the
- *     FRITZ!Box shell responds with a plausible directory listing.
- *  3. Send probe commands to the FRITZ!Box to extract the WiFi SSID/PSK.
- *  4. Connect the ESP32 to the FRITZ!Box WiFi network.
- *     – Falls back to NVS-stored credentials from a previous boot.
- *     – Opens its own Access Point (SSID: FritzBridge-Setup) as a last
- *       resort so the web interface is always reachable.
- *  5. Start the HTTP web server (port 80).
+ * Two build modes are available (controlled by UART_BRIDGE_MODE in config.h):
  *
- * During normal operation loop() feeds new UART bytes into the log
- * ring-buffer and lets the web server handle incoming HTTP requests.
+ * ── UART_BRIDGE_MODE = 1  (default) ────────────────────────────────────────
+ *   Transparent UART-to-USB bridge.  Every byte received on Serial2 (from
+ *   the FRITZ!Box) is forwarded to the USB serial port and vice versa.
+ *   No WiFi, no web server.  Use this mode to verify UART wiring and
+ *   inspect the raw FRITZ!Box console with any terminal at 115200 baud.
+ *
+ * ── UART_BRIDGE_MODE = 0 ────────────────────────────────────────────────────
+ *   Full firmware: WiFi connection (manual credentials via web UI or
+ *   wifi.txt on LittleFS), HTTP web interface with live log, command
+ *   execution, and UART connection check.
+ *
+ *   Boot sequence
+ *   -------------
+ *    1. Initialise the UART driver on Serial2 (GPIO 16/17).
+ *    2. Connect to WiFi using stored NVS credentials, or fall back to AP.
+ *    3. Start the HTTP web server (port 80).
  *
  * Hardware connections
  * --------------------
@@ -30,6 +33,45 @@
 
 #include <Arduino.h>
 #include "config.h"
+
+// ===========================================================================
+// UART Bridge mode – transparent passthrough, no WiFi/web server
+// ===========================================================================
+#if UART_BRIDGE_MODE
+
+void setup() {
+    // USB serial (to PC terminal)
+    Serial.begin(FRITZ_UART_BAUD);
+    delay(200);
+
+    // FRITZ!Box serial console
+    Serial2.begin(FRITZ_UART_BAUD, FRITZ_UART_CONFIG,
+                  FRITZ_UART_RX_PIN, FRITZ_UART_TX_PIN);
+
+    // Brief banner – flushed before bridging starts
+    Serial.println(F("\r\n--- FRITZ!Box UART Bridge (passthrough mode) ---"));
+    Serial.printf( "    Baud: %d | RX pin: %d | TX pin: %d\r\n",
+                   FRITZ_UART_BAUD, FRITZ_UART_RX_PIN, FRITZ_UART_TX_PIN);
+    Serial.println(F("    Type into this terminal to send to the FRITZ!Box."));
+    Serial.println(F("-----------------------------------------------\r\n"));
+}
+
+void loop() {
+    // FRITZ!Box → PC (forward every byte as-is)
+    while (Serial2.available()) {
+        Serial.write(Serial2.read());
+    }
+    // PC → FRITZ!Box (forward every byte as-is)
+    while (Serial.available()) {
+        Serial2.write(Serial.read());
+    }
+}
+
+// ===========================================================================
+// Full firmware – WiFi + web interface
+// ===========================================================================
+#else  // !UART_BRIDGE_MODE
+
 #include "uart_handler.h"
 #include "wifi_manager.h"
 #include "web_server_handler.h"
@@ -57,32 +99,10 @@ void setup() {
     // --- Step 1: Start FRITZ!Box UART ---
     g_uart.begin();
 
-    // Give the FRITZ!Box time to finish booting / printing boot messages
-    // before we start querying it.  Adjust if necessary.
-    Serial.println(F("[Main] Waiting 3 s for FRITZ!Box to settle..."));
-    delay(3000);
+    // --- Step 2: Connect to WiFi (manual credentials via NVS / wifi.txt) ---
+    g_wifi.connect();
 
-    // --- Step 2: Check UART connection health ---
-    // Runs `ls -la /` and validates the response looks like a Linux root
-    // directory listing.  The result is stored in the UartHandler and
-    // exposed by the web API at /api/status and /api/uart-check.
-    UartCheckResult check = g_uart.checkConnection();
-    if (check.online) {
-        Serial.printf("[Main] UART connection OK: %s\n", check.summary.c_str());
-    } else {
-        Serial.printf("[Main] UART connection issue: %s\n",
-                      check.summary.c_str());
-        Serial.println(F("[Main] Continuing anyway – the FRITZ!Box may still "
-                         "be booting or the UART may not be connected yet."));
-    }
-
-    // --- Step 3: Extract WiFi credentials via UART ---
-    WifiCredentials creds = g_uart.extractWifiCredentials();
-
-    // --- Step 4: Connect to WiFi ---
-    g_wifi.connect(creds);
-
-    // --- Step 5: Start web server ---
+    // --- Step 3: Start web server ---
     g_web = new WebServerHandler(g_uart, g_wifi);
     g_web->begin();
 
@@ -104,3 +124,5 @@ void loop() {
         g_web->loop();
     }
 }
+
+#endif  // UART_BRIDGE_MODE

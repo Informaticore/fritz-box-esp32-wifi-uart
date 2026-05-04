@@ -156,14 +156,14 @@ bool WiFiManager::loadFileCredentials(String& ssid, String& password) {
 // Public interface
 // ---------------------------------------------------------------------------
 
-bool WiFiManager::connect(const WifiCredentials& creds) {
-    // --- Step 1: Use UART-extracted credentials ---
-    if (creds.valid) {
-        if (tryConnect(creds.ssid, creds.password)) {
-            saveCredentials(creds.ssid, creds.password);
+bool WiFiManager::connect() {
+    // --- Step 1: Use NVS-stored credentials ---
+    String storedSsid, storedPass;
+    if (loadStoredCredentials(storedSsid, storedPass)) {
+        if (tryConnect(storedSsid, storedPass)) {
             return true;
         }
-        Serial.println(F("[WiFi] UART credentials did not work"));
+        Serial.println(F("[WiFi] Stored credentials did not work"));
     }
 
     // --- Step 2: Use LittleFS wifi.txt file credentials ---
@@ -179,16 +179,7 @@ bool WiFiManager::connect(const WifiCredentials& creds) {
         }
     }
 
-    // --- Step 3: Use NVS-stored credentials ---
-    String storedSsid, storedPass;
-    if (loadStoredCredentials(storedSsid, storedPass)) {
-        if (tryConnect(storedSsid, storedPass)) {
-            return true;
-        }
-        Serial.println(F("[WiFi] Stored credentials did not work"));
-    }
-
-    // --- Step 4: Open fallback AP ---
+    // --- Step 3: Open fallback AP ---
     Serial.println(F("[WiFi] All connection attempts failed; starting AP mode"));
     startAPMode();
     return false;
